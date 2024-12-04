@@ -21,6 +21,7 @@
 #define THRESHOLD 0.1        // 임계값 (m/s²의 차이)
 #define SENSITIVITY 8192.0    // 가속도 센서의 감도 (1g = 16384)
 
+extern int writeTime;
 int i2c_fd;
 
 // I²C 초기화
@@ -110,7 +111,6 @@ int accelerationMain() {
     initSensor();  // 센서 초기화 추가
 
     struct timeval start_t, end_t;
-    double studyTime;
     int over_threshold = 0;  // 임계값 초과 상태 플래그
     float pre_magnitude = 0; // 이전 값
 
@@ -122,22 +122,10 @@ int accelerationMain() {
         printf("Accel Magnitude: %.2f m/s² (X: %.2f, Y: %.2f, Z: %.2f)\n",
                post_magnitude, accel_x, accel_y, accel_z);
 
-        if (fabs(post_magnitude - pre_magnitude) > THRESHOLD) {
-            if (!over_threshold) {  // 임계값 초과 시작
-                gettimeofday(&start_t, NULL);
-                over_threshold = 1;
-                printf("Threshold exceeded, starting timer...\n");
-            }
-        } else {
-            if (over_threshold) {  // 임계값 초과 종료
-                gettimeofday(&end_t, NULL);
-                studyTime = (end_t.tv_sec - start_t.tv_sec) + (end_t.tv_usec - start_t.tv_usec) / 1e6;
-                printf("Threshold exceeded for %.4f seconds\n", studyTime);
-                over_threshold = 0;
-            }
-        }
+        //일정 가속도 이상이면 필기시간++
+        if (fabs(post_magnitude - pre_magnitude) > THRESHOLD) writeTime++;
         pre_magnitude = post_magnitude;
-        usleep(1000000);  // 1000ms 대기
+        sleep(1);  // 1s 대기
     }
 
     close(i2c_fd);  // I²C 디바이스 닫기
