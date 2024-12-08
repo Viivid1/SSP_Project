@@ -21,6 +21,8 @@
 #define PIN 20
 #define POUT 21
 
+#define BUF_SIZE 1024 
+
 int isSit = 0;
 int pi4 = 0;
 long write_time_long = 0;
@@ -130,21 +132,28 @@ void *pi3_thread_func(void){
   return NULL;
 }
 void *pi3_thread_end_func(void){
-  char *buf = buf[100000];//버퍼 크기로 적당한 값으로 변경하기
-  char *message = (char *)malloc(50);  // 동적 메모리 할당
-  read(clnt_sock[0], buf, sizeof(buf));
+  char pi3 = '2';
+  char buf[BUF_SIZE];
+  char *message = (char *)malloc(BUF_SIZE);  // 동적 메모리 할당
+
+  write(clnt_sock[0], pi3, 1); //pi4 중지 & pi3 data 요청
+  int bytes_read = read(clnt_sock[0], buf, sizeof(buf)-1);
+  buf[bytes_read] = '\0'; // null-terminate
   strcpy(message, buf);  // 문자열 복사
   pthread_exit((void *)message);     
   //여기다 반환
 }
 void *pi4_thread_end_func(void) {
-  char pi4_end = '2';
-  char write_time[6];
+  char pi4 = '2';
+  char buf[BUF_SIZE];
+  char *message = (char *)malloc(BUF_SIZE);  // 동적 메모리 할당
+
   //pi4 중지(소켓 값이 0이면 중지) & 필기시간(write_time) 요청
-  write(clnt_sock[1], pi4_end, 1);
-  read(clnt_sock[1], write_time, 1);
-  write_time_long = strtol(write_time, NULL , 10);
-  //여기다 반환
+  write(clnt_sock[1], pi4, 1);
+  int bytes_read = read(clnt_sock[1], buf, sizeof(buf)-1);
+  buf[bytes_read] = '\0'; // null-terminate
+  strcpy(message, buf);  // 문자열 복사
+  pthread_exit((void *)message); 
   return NULL;
 } 
 
@@ -205,10 +214,11 @@ int main(int argc, char *argv[]) {
   pthread_t pi3_thread;
   pthread_t pi3_thread_end;
   pthread_t pi4_thread_end;
-  void *pressure_data;
-  void *video_data;
   char pi4 = '0';
   char *pi3_data;
+  char *pi4_data;
+  char write_time[6] = {0};  // 0~5 인덱스 저장
+  char time_laps[BUF_SIZE] = {0};  // 6부터 끝까지 저장
 
   while (1) {
 
@@ -224,18 +234,25 @@ int main(int argc, char *argv[]) {
         pthread_cancel(pi3_thread_func);
         pthread_join(pi3_thread_func, NULL);
         //pi3로부터 데이터 가져오기
-        pthread_create(&pi3_thread_end, NULL, pi3_thread_end_func, *pi3_data);
-        pthread_join(pi4_thread_end, NULL);
+        pthread_create(&pi3_thread_end, NULL, pi3_thread_end_func, NULL);
+        pthread_join(pi3_thread_end, (void **)&pi3_data);
+        free(pi3_data);
         //pi4로부터 필기 시간, 타임랩스 가져오기
         pthread_create(&pi4_thread_end, NULL, pi4_thread_end_func, NULL);
-        pthread_join(pi4_thread_end);
+        pthread_join(pi4_thread_end, (void **)&pi4_data);
+        //필기 시간, 타임랩스 분리
+        strncpy(write_time, pi4_data, 6);  // 0~5 인덱스 복사
+        write_time[5] = '\0';             // null-terminate for safety
+        strcpy(time_laps, pi4_data + 6);  // 6부터 끝까지 복사      
+        free(pi4_data);  // 동적 메모리 해제
 
+        long write_time_long = strtol(write_time, NULL, 10);
         int hours = write_time_long / 3600;
         int minutes = (write_time_long % 3600) / 60;
         int secs = write_time_long % 60;
         printf("pi3_data: %s\n", pi3_data);// 공부자세? 출력
         printf("공부시간: %02d:%02d:%02d (hh:mm:ss)\n",hours, minutes, secs); //필기시간 출력
-        printf(); //동영상 출력
+        printf("time_laps: %s\n", time_laps);//동영상 출력..인데 이게 맞나
 
         break;
       }
