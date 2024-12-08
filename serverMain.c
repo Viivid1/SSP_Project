@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <limits.h>
 
 #define BUFFER_MAX 3
 #define DIRECTION_MAX 256
@@ -24,8 +25,8 @@
 #define BUF_SIZE 1024 
 
 int isSit = 0;
-int pi4 = 0;
-long write_time_long = 0;
+char cwd[PATH_MAX];
+
 
 void error_handling(char *message) {
   fputs(message, stderr);
@@ -147,13 +148,42 @@ void *pi4_thread_end_func(void) {
   char pi4 = '2';
   char buf[BUF_SIZE];
   char *message = (char *)malloc(BUF_SIZE);  // 동적 메모리 할당
+  
+  long file_size;
+  long total_received = 0;
 
-  //pi4 중지(소켓 값이 0이면 중지) & 필기시간(write_time) 요청
+  //write_time 받아오기
   write(clnt_sock[1], pi4, 1);
   int bytes_read = read(clnt_sock[1], buf, sizeof(buf)-1);
   buf[bytes_read] = '\0'; // null-terminate
   strcpy(message, buf);  // 문자열 복사
-  pthread_exit((void *)message); 
+  
+
+  //photos.zip 받아오기
+  pi4 = '3';
+  const char *folder_name = "study_photos";
+  mkdir(folder_name, 0777);
+  getcwd(cwd, sizeof(cwd));
+  snprintf(full_path, sizeof(full_path), "%s/%s", cwd, folder_name);
+
+  write(clnt_sock[1], pi4, 1);
+  FILE *fp = fopen(full_path, "wb");
+  recv(clnt_sock[1], &file_size, sizeof(file_size), 0)
+  while (total_received < file_size) {
+        int bytes_received = recv(clnt_sock[1], buf, BUF_SIZE, 0);
+        if (bytes_received <= 0) {
+            perror("File receive error");
+            fclose(fp);
+            return;
+        }
+        mkdir(folder_name, 0777);
+        fwrite(buf, 1, bytes_received, fp);
+        total_received += bytes_received;
+        printf("File received successfully: %s\n", file_path);
+        
+  }
+  fclose(fp);
+  pthread_exit((void *)message);
   return NULL;
 } 
 
@@ -182,7 +212,7 @@ int main(int argc, char *argv[]) {
   // 서버 주소 설정
   memset(&serv_addr, 0, sizeof(serv_addr));
   serv_addr.sin_family = AF_INET;
-  inet_pton(AF_INET, "192.168.0.1", &serv_addr.sin_addr);
+  inet_pton(AF_INET, "192.168.0.5", &serv_addr.sin_addr);
   //serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
   serv_addr.sin_port = htons(9999); //직접 설정
 
@@ -218,7 +248,7 @@ int main(int argc, char *argv[]) {
   char *pi3_data;
   char *pi4_data;
   char write_time[6] = {0};  // 0~5 인덱스 저장
-  char time_laps[BUF_SIZE] = {0};  // 6부터 끝까지 저장
+  char photo_zip[BUF_SIZE] = {0};  // 6부터 끝까지 저장
 
   while (1) {
 
@@ -226,12 +256,12 @@ int main(int argc, char *argv[]) {
 
     if (prev_state == 0 && state == 1) { //버튼이 눌렸을 때
       //공부 시작
-      if(pi3_unstart) pthread_create(&pi3_thread_func, NULL, pi3_thread_func, NULL); //pi3 시작
+      if(pi3_unstart) pthread_create(&pi3_thread, NULL, pi3_thread_func, NULL); //pi3 시작
       //공부 종료
       else{
         //pi3 종료
-        pthread_cancel(pi3_thread_func);
-        pthread_join(pi3_thread_func, NULL);
+        pthread_cancel(pi3_thread);
+        pthread_join(pi3_thread, NULL);
         //pi3로부터 데이터 가져오기
         pthread_create(&pi3_thread_end, NULL, pi3_thread_end_func, NULL);
         pthread_join(pi3_thread_end, (void **)&pi3_data);
@@ -242,7 +272,7 @@ int main(int argc, char *argv[]) {
         //필기 시간, 타임랩스 분리
         strncpy(write_time, pi4_data, 6);  // 0~5 인덱스 복사
         write_time[6] = '\0';             // null-terminate for safety
-        strcpy(time_laps, pi4_data + 6);  // 6부터 끝까지 복사      
+        strcpy(photo_zip, pi4_data + 6);  // 6부터 끝까지 복사      
         free(pi4_data);  // 동적 메모리 해제
 
         long write_time_long = strtol(write_time, NULL, 10);
@@ -251,7 +281,7 @@ int main(int argc, char *argv[]) {
         int secs = write_time_long % 60;
         printf("pi3_data: %s\n", pi3_data);// 공부자세? 출력
         printf("공부시간: %02d:%02d:%02d (hh:mm:ss)\n",hours, minutes, secs); //필기시간 출력
-        printf("time_laps: %s\n", time_laps);//동영상 출력..인데 이게 맞나
+        printf("photo_zip 저장 경로: %s\n", photo_zip);//동영상 출력..인데 이게 맞나
 
         break;
       }
@@ -271,7 +301,7 @@ int main(int argc, char *argv[]) {
       pi4_unstart = 1;
     }
     prev_state = state;
-    usleep(500 * 100);
+    usleep(100000);
   }
     
   close(clnt_sock[0]);

@@ -4,5 +4,7 @@
 extern int writeTime;
 
 int accelerationMain();
+int I2CInit();
+void initSensor();
 
 #endif

@@ -1,7 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <time.h>
+#include <string.h>
+#include <arpa/inet.h>
+#include <sys/stat.h>
+
+#define BUF_SIZE 1024
 
 void take_picture(int index) {
     char filename[50];
@@ -14,27 +18,27 @@ void take_picture(int index) {
     printf("Photo saved: %s\n", filename);
 }
 
-void create_timelapse_video(const char *output_file) {
+void create_photo_zip(const char *zip_name) {
     char command[200];
-    snprintf(command, 200, "ffmpeg -y -r 30 -i photos/photo_%%03d.jpg -vcodec libx264 -pix_fmt yuv420p %s", output_file);
+    snprintf(command, 200, "zip -r %s photos", zip_name);
     system(command);
-
-    printf("Timelapse video created: %s\n", output_file);
+    printf("Photos compressed into: %s\n", zip_name);
 }
 
-int cameraMain() {
-    const int num_photos = 100; 
-    const int interval = 3;
-    const char *output_video = "timelapse.mp4";
+int cameraMain(int argc, char *argv[]) {
+    char message[BUF_SIZE];
+    int photo_index = 0;
 
+    // 작업 디렉토리 생성
     system("mkdir -p photos");
 
-    for (int i = 0; i < num_photos; i++) {
-        take_picture(i);
-        sleep(interval);
+    while (1) {
+        printf("Photo capturing started...\n");
+        while (1) {
+            if()
+            take_picture(photo_index++);
+            sleep(5); 
+        }
     }
-
-    create_timelapse_video(output_video);
-
     return 0;
 }

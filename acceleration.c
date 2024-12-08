@@ -103,31 +103,19 @@ float calculateMagnitude(float x, float y, float z) {
     return sqrt(x * x + y * y + z * z);
 }
 
-int accelerationMain() {
-    if (I2CInit() == -1) {
-        return -1;
-    }
-
-    initSensor();  // 센서 초기화 추가
-
-    struct timeval start_t, end_t;
+int accelerationMain(float pre_magnitude) {
     int over_threshold = 0;  // 임계값 초과 상태 플래그
-    float pre_magnitude = 0; // 이전 값
 
-    while (1) {
-        float accel_x, accel_y, accel_z;
-        readAccelXYZ(&accel_x, &accel_y, &accel_z);  // X, Y, Z축 가속도 읽기
+    float accel_x, accel_y, accel_z;
+    readAccelXYZ(&accel_x, &accel_y, &accel_z);  // X, Y, Z축 가속도 읽기
 
-        float post_magnitude = calculateMagnitude(accel_x, accel_y, accel_z);  // 합성 가속도 계산
-        printf("Accel Magnitude: %.2f m/s² (X: %.2f, Y: %.2f, Z: %.2f)\n",
-               post_magnitude, accel_x, accel_y, accel_z);
+    float post_magnitude = calculateMagnitude(accel_x, accel_y, accel_z);  // 합성 가속도 계산
+    printf("Accel Magnitude: %.2f m/s² (X: %.2f, Y: %.2f, Z: %.2f)\n",
+            post_magnitude, accel_x, accel_y, accel_z);
 
-        //일정 가속도 이상이면 필기시간++
-        if (fabs(post_magnitude - pre_magnitude) > THRESHOLD) writeTime++;
-        pre_magnitude = post_magnitude;
-        sleep(1);  // 1s 대기
-    }
+    //일정 가속도 이상이면 필기시간++
+    if (fabs(post_magnitude - pre_magnitude) > THRESHOLD) writeTime++;
+    pre_magnitude = post_magnitude;
 
-    close(i2c_fd);  // I²C 디바이스 닫기
-    return 0;
+    return pre_magnitude;
 }
