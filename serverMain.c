@@ -116,7 +116,7 @@ static int GPIOWrite(int pin, int value) {
 }
 
 // pi3&pi4 처리 스레드
-void *pi3_thread(void){
+void *pi3_thread_func(void){
   char pi3 = '1';
   char threshold = '0';
   //pi3 작동(소켓 값이 1이면 작동)
@@ -129,27 +129,18 @@ void *pi3_thread(void){
   }
   return NULL;
 }
-void *pi3_thread_end(void){
-  char buf[100000];//버퍼 크기로 적당한 값으로 변경하기
+void *pi3_thread_end_func(void){
+  char *buf = buf[100000];//버퍼 크기로 적당한 값으로 변경하기
+  char *message = (char *)malloc(50);  // 동적 메모리 할당
   read(clnt_sock[0], buf, sizeof(buf));
-  pthread_exit(buf);
+  strcpy(message, buf);  // 문자열 복사
+  pthread_exit((void *)message);     
   //여기다 반환
 }
-void *pi4_thread_start(void) {
-  char pi4 = '1';
-  //pi4 작동(소켓 값이 1이면 작동)
-  write(clnt_sock[1], pi4, 1);
-  return NULL;
-}
-void *pi4_thread_rest(void){
-  char pi4_rest = '0';
-  //pi4 작동(소켓 값이 2이면 데이터 반환)
-  write(clnt_sock[1], pi4_rest, 1);
-}
-void *pi4_thread_end(void) {
+void *pi4_thread_end_func(void) {
   char pi4_end = '2';
   char write_time[6];
-  //pi4 중지(소켓 값이 0이면 중지) & 필기시간 요청
+  //pi4 중지(소켓 값이 0이면 중지) & 필기시간(write_time) 요청
   write(clnt_sock[1], pi4_end, 1);
   read(clnt_sock[1], write_time, 1);
   write_time_long = strtol(write_time, NULL , 10);
@@ -212,11 +203,12 @@ int main(int argc, char *argv[]) {
   int pi3_start = 0;
   int pi4_unstart = 1;
   pthread_t pi3_thread;
-  pthread_t pi4_thread_start;
-  pthread_t pi4_thread_rest;
+  pthread_t pi3_thread_end;
   pthread_t pi4_thread_end;
   void *pressure_data;
   void *video_data;
+  char pi4 = '0';
+  char *pi3_data;
 
   while (1) {
 
@@ -224,22 +216,24 @@ int main(int argc, char *argv[]) {
 
     if (prev_state == 0 && state == 1) { //버튼이 눌렸을 때
       //공부 시작
-      //압력 센서 실행
-      pthread_create(&pi3_thread, NULL, pi3_thread, NULL); 
-      if(pi3_start){ //공부 종료
+      //pi3 시작
+      pthread_create(&pi3_thread_func, NULL, pi3_thread_func, NULL);
+
+      if(pi3_start){ //공부 완전 종료
         //pi3 종료
-        pthread_cancel(pi3_thread);
-        pthread_join(pi3_thread, NULL);
+        pthread_cancel(pi3_thread_func);
+        pthread_join(pi3_thread_func, NULL);
         //pi3로부터 데이터 가져오기
-        pthread_create(&pi3_thread_end, NULL, pi3_thread_end, NULL);
+        pthread_create(&pi3_thread_end, NULL, pi3_thread_end_func, *pi3_data);
         pthread_join(pi4_thread_end, NULL);
         //pi4로부터 필기 시간, 타임랩스 가져오기
-        pthread_create(&pi4_thread_end, NULL, pi4_thread_end, NULL);
+        pthread_create(&pi4_thread_end, NULL, pi4_thread_end_func, NULL);
         pthread_join(pi4_thread_end);
+
         int hours = write_time_long / 3600;
         int minutes = (write_time_long % 3600) / 60;
         int secs = write_time_long % 60;
-        printf();// 공부자세? 출력
+        printf("pi3_data: %s\n", pi3_data);// 공부자세? 출력
         printf("공부시간: %02d:%02d:%02d (hh:mm:ss)\n",hours, minutes, secs); //필기시간 출력
         printf(); //동영상 출력
 
@@ -250,23 +244,17 @@ int main(int argc, char *argv[]) {
        
     if(isSit && pi4_unstart){ //압력 센서 임계값 넘었을 때
       //pi4 실행
-      if (pthread_create(&pi4_thread_start, NULL, pi4_thread_start, NULL) != 0) { 
-        perror("pthread_create");
-        return 1;
-      }
-      pthread_join(pi4_thread_start,NULL);
+      pi4 = '1';
+      write(clnt_sock[1], pi4, 1);
       pi4_unstart = 0;
     }
     if((!isSit) && !(pi4_unstart)){//pi4 휴식
-      if (pthread_create(&pi4_thread_rest, NULL, pi4_thread_rest, NULL) != 0) { 
-        perror("pthread_create");
-        return 1;
-      }
-      pthread_join(pi4_thread_rest,NULL);
+      pi4 = '0';
+      write(clnt_sock[1], pi4, 1);
       pi4_unstart = 1;
     }    
-      prev_state = state;
-      usleep(500 * 100);
+    prev_state = state;
+    usleep(500 * 100);
   }
     
   close(clnt_sock[0]);
