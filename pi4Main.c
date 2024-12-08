@@ -7,10 +7,15 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
-#include "accleration.h"
+#include "acceleration.h"
 #include "camera.h"
 
+#define BUF_SIZE 1024
+
+
+
 int writeTime = 0;
+float pre_magnitude = 0.0;
 
 void send_file(int sock, const char *file_path) {
     FILE *fp = fopen(file_path, "rb");
@@ -34,7 +39,7 @@ void send_file(int sock, const char *file_path) {
     printf("File sent: %s\n", file_path);
 }
 
-void *acceleration_thread_func(void) {
+void *acceleration_thread_func(void *arg) {
     while(1){
         pre_magnitude = accelerationMain(pre_magnitude); // 가속도 센서 실행
         sleep(1);
@@ -42,10 +47,9 @@ void *acceleration_thread_func(void) {
     return NULL;
 }
 
-void *camera_thread_func(void) {
+void *camera_thread_func(void *arg) {
     while (1) {
         cameraMain(); // 카메라 관련 작업
-        take_picture()
         sleep(5); // 1초 대기
     }
     return NULL;
@@ -56,8 +60,7 @@ int main(void) {
     int isStart = 0;
     struct sockaddr_in serv_addr;
     char send_buf[64];  // 서버로 보낼 데이터 버퍼
-    char recv_buf; // 서버로부터 받은 데이터 버퍼
-    float pre_magnitude = 0;
+    char recv_buf[1]; // 서버로부터 받은 데이터 버퍼
     pthread_t camera_thread, acceleration_thread;
 
     sock = socket(PF_INET, SOCK_STREAM, 0);
@@ -94,15 +97,15 @@ int main(void) {
 
         if (read_bytes) {
             printf("Received from server: %s\n", recv_buf);
-            if(isSit=='1' && isStart=0){ // pi3 실행
+            if(isSit=='1' && isStart==0){ // pi3 실행
                 pthread_create(&acceleration_thread, NULL, acceleration_thread_func, NULL);
                 pthread_create(&camera_thread, NULL, camera_thread_func, NULL);
                 cameraMain(); //카메라 센서 실행
                 isStart = 1;
             }
-            else if(isSit=='0' isStart=1){ //휴식
-                pthread_cancel(accelration_thread);
-                pthread_join(accelration_thread, NULL);
+            else if(isSit=='0' && isStart==1){ //휴식
+                pthread_cancel(acceleration_thread);
+                pthread_join(acceleration_thread, NULL);
                 pthread_cancel(camera_thread);
                 pthread_join(camera_thread, NULL);
                 isStart = 0;
@@ -117,10 +120,8 @@ int main(void) {
                 // 필기시간 전송
                 if (write(sock, send_buf, strlen(send_buf)) == -1) {
                     perror("write() error");
-                    cleanup(sock, i2c_fd);
                     exit(1);
                 }
-                close(i2c_fd);  // I²C 디바이스 닫기
             }
             else if(isSit=='3'){
                 pthread_cancel(camera_thread);

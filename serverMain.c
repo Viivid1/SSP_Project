@@ -8,6 +8,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <limits.h>
+#include <pthread.h>
 
 #define BUFFER_MAX 3
 #define DIRECTION_MAX 256
@@ -26,6 +27,7 @@
 
 int isSit = 0;
 char cwd[PATH_MAX];
+int clnt_sock[2];
 
 
 void error_handling(char *message) {
@@ -119,21 +121,21 @@ static int GPIOWrite(int pin, int value) {
 }
 
 // pi3&pi4 처리 스레드
-void *pi3_thread_func(void){
-  char pi3 = '1';
-  char threshold = '0';
+void *pi3_thread_func(void *arg){
+  char pi3[1] = {'1'};       // 단일 문자 배열
+  char threshold[1] = {0}; // 단일 문자 배열
   //pi3 작동(소켓 값이 1이면 작동)
   while(1){
     write(clnt_sock[0], pi3, 1);
     //pi3로부터 압력 threshold 넘었는지 확인(넘었으면 pi3에서 소켓으로 1 전송)
     read(clnt_sock[0], threshold, 1);
     // 문자열 -> 정수형
-    isSit = threshold - '0';
+    isSit = threshold[0] - '0';
   }
   return NULL;
 }
-void *pi3_thread_end_func(void){
-  char pi3 = '2';
+void *pi3_thread_end_func(void *arg){
+  char pi3[1] = {'2'};
   char buf[BUF_SIZE];
   char *message = (char *)malloc(BUF_SIZE);  // 동적 메모리 할당
 
@@ -144,11 +146,12 @@ void *pi3_thread_end_func(void){
   pthread_exit((void *)message);     
   return NULL;
 }
-void *pi4_thread_end_func(void) {
-  char pi4 = '2';
+void *pi4_thread_end_func(void *arg) {
+  char pi4[1] = {'2'};
   char buf[BUF_SIZE];
   char *message = (char *)malloc(BUF_SIZE);  // 동적 메모리 할당
-  
+  char full_path[256];
+
   long file_size;
   long total_received = 0;
 
@@ -160,7 +163,7 @@ void *pi4_thread_end_func(void) {
   
 
   //photos.zip 받아오기
-  pi4 = '3';
+  pi4[1] = '3';
   const char *folder_name = "study_photos";
   mkdir(folder_name, 0777);
   getcwd(cwd, sizeof(cwd));
@@ -168,18 +171,18 @@ void *pi4_thread_end_func(void) {
 
   write(clnt_sock[1], pi4, 1);
   FILE *fp = fopen(full_path, "wb");
-  recv(clnt_sock[1], &file_size, sizeof(file_size), 0)
+  recv(clnt_sock[1], &file_size, sizeof(file_size), 0);
   while (total_received < file_size) {
         int bytes_received = recv(clnt_sock[1], buf, BUF_SIZE, 0);
         if (bytes_received <= 0) {
             perror("File receive error");
             fclose(fp);
-            return;
+            return NULL;
         }
         mkdir(folder_name, 0777);
         fwrite(buf, 1, bytes_received, fp);
         total_received += bytes_received;
-        printf("File received successfully: %s\n", file_path);
+        printf("File received successfully: %s\n", full_path);
         
   }
   fclose(fp);
@@ -191,7 +194,6 @@ int main(int argc, char *argv[]) {
   int state = 1;
   int prev_state = 1;
   int serv_sock = -1; //얘도 고쳐야 하나?
-  int clnt_sock[2] = {0};
   int client_count = 0;
   struct sockaddr_in serv_addr, clnt_addr;
   socklen_t clnt_addr_size;
@@ -244,7 +246,7 @@ int main(int argc, char *argv[]) {
   pthread_t pi3_thread;
   pthread_t pi3_thread_end;
   pthread_t pi4_thread_end;
-  char pi4 = '0';
+  char pi4[1];
   char *pi3_data;
   char *pi4_data;
   char write_time[6] = {0};  // 0~5 인덱스 저장
@@ -286,17 +288,17 @@ int main(int argc, char *argv[]) {
         break;
       }
       
-      pi3_start = 1;
+      pi3_unstart = 0;
     }
        
     if(isSit && pi4_unstart){ //압력 센서 임계값 넘었을 때
       //pi4 실행
-      pi4 = '1';
+      pi4[1] = {'1'};
       write(clnt_sock[1], pi4, 1);
       pi4_unstart = 0;
     }
     if((!isSit) && !(pi4_unstart)){//pi4 휴식
-      pi4 = '0';
+      pi4[1] = {'0'};
       write(clnt_sock[1], pi4, 1);
       pi4_unstart = 1;
     }
