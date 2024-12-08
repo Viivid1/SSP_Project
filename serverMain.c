@@ -141,7 +141,7 @@ void *pi3_thread_end_func(void){
   buf[bytes_read] = '\0'; // null-terminate
   strcpy(message, buf);  // 문자열 복사
   pthread_exit((void *)message);     
-  //여기다 반환
+  return NULL;
 }
 void *pi4_thread_end_func(void) {
   char pi4 = '2';
@@ -185,7 +185,7 @@ int main(int argc, char *argv[]) {
   inet_pton(AF_INET, "192.168.0.1", &serv_addr.sin_addr);
   //serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
   serv_addr.sin_port = htons(9999); //직접 설정
-  
+
 
   // 소켓과 주소 바인딩
   if (bind(serv_sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) == -1)
@@ -209,7 +209,7 @@ int main(int argc, char *argv[]) {
   }
 
   // 메인 로직
-  int pi3_start = 0;
+  int pi3_unstart = 1;
   int pi4_unstart = 1;
   pthread_t pi3_thread;
   pthread_t pi3_thread_end;
@@ -226,10 +226,9 @@ int main(int argc, char *argv[]) {
 
     if (prev_state == 0 && state == 1) { //버튼이 눌렸을 때
       //공부 시작
-      //pi3 시작
-      pthread_create(&pi3_thread_func, NULL, pi3_thread_func, NULL);
-
-      if(pi3_start){ //공부 완전 종료
+      if(pi3_unstart) pthread_create(&pi3_thread_func, NULL, pi3_thread_func, NULL); //pi3 시작
+      //공부 종료
+      else{
         //pi3 종료
         pthread_cancel(pi3_thread_func);
         pthread_join(pi3_thread_func, NULL);
@@ -242,7 +241,7 @@ int main(int argc, char *argv[]) {
         pthread_join(pi4_thread_end, (void **)&pi4_data);
         //필기 시간, 타임랩스 분리
         strncpy(write_time, pi4_data, 6);  // 0~5 인덱스 복사
-        write_time[5] = '\0';             // null-terminate for safety
+        write_time[6] = '\0';             // null-terminate for safety
         strcpy(time_laps, pi4_data + 6);  // 6부터 끝까지 복사      
         free(pi4_data);  // 동적 메모리 해제
 
@@ -256,6 +255,7 @@ int main(int argc, char *argv[]) {
 
         break;
       }
+      
       pi3_start = 1;
     }
        
@@ -269,7 +269,7 @@ int main(int argc, char *argv[]) {
       pi4 = '0';
       write(clnt_sock[1], pi4, 1);
       pi4_unstart = 1;
-    }    
+    }
     prev_state = state;
     usleep(500 * 100);
   }
