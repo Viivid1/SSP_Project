@@ -35,7 +35,6 @@ int cameraMain(int argc, char *argv[]) {
     while (1) {
         printf("Photo capturing started...\n");
         while (1) {
-            if()
             take_picture(photo_index++);
             sleep(5); 
         }
