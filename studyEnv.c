@@ -31,7 +31,7 @@
 int toggle = 0;             // 스피커 ON/OFF 상태
 int light = 0;              // LED 상태 (0: OFF, 1: LED1 ON, 2: LED2 ON)
 int arr[2] = {0};           // LED 상태 저장 배열
-int repeat = 10000;         // 반복 횟수
+int repeat = 1;             // 모든 코드를 제어하는 변수
 int arr_bitmask = 0;        // LED 비트마스크 상태
 
 // PWM 핀을 활성화
