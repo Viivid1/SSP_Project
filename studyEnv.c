@@ -1,3 +1,4 @@
+// 필요한 헤더 파일 포함
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,7 +7,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <time.h>
 
+// GPIO 및 PWM 매크로 정의
 #define IN 0
 #define OUT 1
 #define PWM 0
@@ -14,27 +17,29 @@
 #define LOW 0
 #define HIGH 1
 
-#define PIN 20
-#define POUT2 21
-#define PPIN 23
-#define PPOUT 24
-#define POUT 17
-#define POUT3 27
+#define PIN 20        // 첫 번째 버튼의 GPIO 핀 번호
+#define POUT2 21      // 첫 번째 LED의 GPIO 핀 번호
+#define PPIN 23       // 두 번째 버튼의 GPIO 핀 번호
+#define PPOUT 24      // 두 번째 LED의 GPIO 핀 번호
+#define POUT 17       // LED 1 GPIO 핀
+#define POUT3 27      // LED 2 GPIO 핀
 #define VALUE_MAX 256
 #define DIRECTION_MAX 256
 #define BUFFER_MAX 3
 
-int toggle = 0;
-int light = 0;
-int arr[2] = {0};
-int repeat = 200;
+// 글로벌 변수 선언
+int toggle = 0;             // 스피커 ON/OFF 상태
+int light = 0;              // LED 상태 (0: OFF, 1: LED1 ON, 2: LED2 ON)
+int arr[2] = {0};           // LED 상태 저장 배열
+int repeat = 10000;         // 반복 횟수
+int arr_bitmask = 0;        // LED 비트마스크 상태
 
+// PWM 핀을 활성화
 static int PWMExport(int pwmnum)
 {
     char buffer[BUFFER_MAX];
     int fd, byte;
 
-    // TODO: Enter the export path.
     fd = open("/sys/class/pwm/pwmchip0/export", O_WRONLY);
     if (-1 == fd)
     {
@@ -51,6 +56,7 @@ static int PWMExport(int pwmnum)
     return (0);
 }
 
+// PWM 핀 사용 가능 설정
 static int PWMEnable(int pwmnum)
 {
     static const char s_enable_str[] = "1";
@@ -58,7 +64,6 @@ static int PWMEnable(int pwmnum)
     char path[DIRECTION_MAX];
     int fd;
 
-    // TODO: Enter the enable path.
     snprintf(path, DIRECTION_MAX, "/sys/class/pwm/pwmchip0/pwm0/enable", pwmnum);
     fd = open(path, O_WRONLY);
     if (-1 == fd)
@@ -73,13 +78,13 @@ static int PWMEnable(int pwmnum)
     return (0);
 }
 
+// PWM 주기(period) 설정
 static int PWMWritePeriod(int pwmnum, int value)
 {
     char s_value_str[VALUE_MAX];
     char path[VALUE_MAX];
     int fd, byte;
 
-    // TODO: Enter the period path.
     snprintf(path, VALUE_MAX, "/sys/class/pwm/pwmchip0/pwm0/period", pwmnum);
     fd = open(path, O_WRONLY);
     if (-1 == fd)
@@ -100,13 +105,13 @@ static int PWMWritePeriod(int pwmnum, int value)
     return (0);
 }
 
+// PWM 듀티 사이클 설정
 static int PWMWriteDutyCycle(int pwmnum, int value)
 {
     char s_value_str[VALUE_MAX];
     char path[VALUE_MAX];
     int fd, byte;
 
-    // TODO: Enter the duty_cycle path.
     snprintf(path, VALUE_MAX, "/sys/class/pwm/pwmchip0/pwm0/duty_cycle", pwmnum);
     fd = open(path, O_WRONLY);
     if (-1 == fd)
@@ -127,6 +132,7 @@ static int PWMWriteDutyCycle(int pwmnum, int value)
     return (0);
 }
 
+// PWM 비활성화
 static int PWMDisable(int pwmnum)
 {
     static const char s_disable_str[] = "0";
@@ -147,6 +153,7 @@ static int PWMDisable(int pwmnum)
     return (0);
 }
 
+// PWM 주파수 설정
 void setFrequency(int pwmnum, int frequency)
 {
     int period = 1000000000 / frequency;
@@ -154,14 +161,15 @@ void setFrequency(int pwmnum, int frequency)
     PWMWriteDutyCycle(pwmnum, period / 2);
 }
 
+// PWM으로 소리 끄기
 void stopSound(int pwmnum)
 {
     PWMWriteDutyCycle(pwmnum, 0);
 }
 
+// GPIO 핀 초기화
 static int GPIOExport(int pin)
 {
-#define BUFFER_MAX 3
     char buffer[BUFFER_MAX];
     ssize_t bytes_written;
     int fd;
@@ -179,6 +187,7 @@ static int GPIOExport(int pin)
     return (0);
 }
 
+// GPIO 핀 해제
 static int GPIOUnexport(int pin)
 {
     char buffer[BUFFER_MAX];
@@ -198,6 +207,7 @@ static int GPIOUnexport(int pin)
     return (0);
 }
 
+// GPIO 핀 방향 설정
 static int GPIODirection(int pin, int dir)
 {
     static const char s_directions_str[] = "in\0out";
@@ -224,6 +234,7 @@ static int GPIODirection(int pin, int dir)
     return (0);
 }
 
+// GPIO 핀 읽기
 static int GPIORead(int pin)
 {
     char path[VALUE_MAX];
@@ -249,6 +260,7 @@ static int GPIORead(int pin)
     return (atoi(value_str));
 }
 
+// GPIO 핀 쓰기
 static int GPIOWrite(int pin, int value)
 {
     static const char s_values_str[] = "01";
@@ -274,9 +286,46 @@ static int GPIOWrite(int pin, int value)
     return (0);
 }
 
+// LED를 제어하는 스레드
+void *t_function1(void *data)
+{
+    // LED GPIO 핀 초기화
+    if (GPIOExport(POUT) == -1 || GPIOExport(POUT3) == -1)
+    {
+        printf("export error\n");
+        return NULL;
+    }
+
+    // LED GPIO 핀 방향 설정
+    if (GPIODirection(POUT, OUT) == -1 || GPIODirection(POUT3, OUT) == -1)
+    {
+        printf("direction error\n");
+        return NULL;
+    }
+
+    // LED 상태를 arr_bitmask를 통해 제어
+    while (repeat)
+    {
+        if (GPIOWrite(POUT, (arr_bitmask & 0) ? 1 : 0) == -1)
+        {
+            printf("write error\n");
+            return NULL;
+        }
+        
+        if (GPIOWrite(POUT3, (arr_bitmask & 1) ? 1 : 0) == -1)
+        {
+            printf("write error\n");
+            return NULL;
+        }
+    }
+
+    GPIOUnexport(POUT);
+    GPIOUnexport(POUT3);
+}
+
+// 스피커를 제어하는 스레드
 void *t_function2(void *data)
 {
-
     PWMExport(PWM);
     sleep(1);
     stopSound(PWM);
@@ -286,53 +335,18 @@ void *t_function2(void *data)
     {
         if (toggle)
         {
-            setFrequency(PWM, 440);
+            setFrequency(PWM, 40); // 스피커 켜기
         }
         else
         {
-            stopSound(PWM);
+            stopSound(PWM); // 스피커 끄기
         }
     }
 
     PWMDisable(PWM);
 }
 
-void *t_function1(void *data)
-{
-    if (GPIOExport(POUT) == -1 ||
-        GPIOExport(POUT3) == -1)
-    {
-        printf("export error\n");
-        return NULL;
-    }
-
-    if (GPIODirection(POUT, OUT) == -1 ||
-        GPIODirection(POUT3, OUT) == -1)
-    {
-        printf("direction error\n");
-        return NULL;
-    }
-
-    while (repeat)
-    {
-        if (GPIOWrite(POUT, arr[0]) == -1)
-        {
-            printf("write error\n");
-            return NULL;
-        }
-        if (GPIOWrite(POUT3, arr[1]) == -1)
-        {
-            printf("write error\n");
-            return NULL;
-        }
-    }
-
-    if (GPIOUnexport(POUT) == -1 || GPIOUnexport(POUT3) == -1)
-    {
-        return NULL;
-    }
-}
-
+// 메인 함수: LED와 스피커 제어를 위한 스레드 생성 및 버튼 입력 처리
 int main(int argc, char *argv[])
 {
     pthread_t p_thread[2];
@@ -340,11 +354,12 @@ int main(int argc, char *argv[])
     int status;
     char p1[] = "thread_1";
     char p2[] = "thread_2";
-    int state = 1;
-    int prev_state = 1;
-    int _state = 1;
-    int _prev_state = 1;
+    int state = 1;        //LED 버튼 인식
+    int prev_state = 1;   //LED 버튼 인식
+    int _state = 1;       //피에조 스피커
+    int _prev_state = 1;  //피에조 스피커
 
+    // LED 제어 스레드 생성
     thr_id = pthread_create(&p_thread[0], NULL, t_function1, (void *)p1);
     if (thr_id < 0)
     {
@@ -352,6 +367,7 @@ int main(int argc, char *argv[])
         exit(0);
     }
 
+    // 스피커 제어 스레드 생성
     thr_id = pthread_create(&p_thread[1], NULL, t_function2, (void *)p2);
     if (thr_id < 0)
     {
@@ -359,22 +375,19 @@ int main(int argc, char *argv[])
         exit(0);
     }
 
-    if (GPIOExport(POUT2) == -1 ||
-        GPIOExport(PIN) ||
-        GPIOExport(PPOUT) == -1 ||
-        GPIOExport(PPIN))
+    // GPIO 초기화
+    if (GPIOExport(POUT2) == -1 || GPIOExport(PIN) || GPIOExport(PPOUT) == -1 || GPIOExport(PPIN))
     {
         return 1;
     }
 
-    if (GPIODirection(POUT2, OUT) == -1 ||
-        GPIODirection(PIN, IN) == -1 ||
-        GPIODirection(PPOUT, OUT) == -1 ||
-        GPIODirection(PPIN, IN) == -1)
+    if (GPIODirection(POUT2, OUT) == -1 || GPIODirection(PIN, IN) == -1 ||
+        GPIODirection(PPOUT, OUT) == -1 || GPIODirection(PPIN, IN) == -1)
     {
         return 2;
     }
 
+    // 버튼 상태 확인 및 제어 반복
     do
     {
         if (GPIOWrite(POUT2, 1) == -1 || GPIOWrite(PPOUT, 1) == -1)
@@ -391,14 +404,13 @@ int main(int argc, char *argv[])
             switch (light)
             {
             case 0:
-                arr[0] = 0;
-                arr[1] = 0;
+                arr_bitmask &= 0;  // 0
                 break;
             case 1:
-                arr[0] = 1;
+                arr_bitmask |= 1;  // 1
                 break;
             case 2:
-                arr[1] = 1;
+                arr_bitmask |= 3;  // 11
                 break;
             default:
                 break;
@@ -413,16 +425,19 @@ int main(int argc, char *argv[])
         prev_state = state;
         _prev_state = _state;
 
-        printf("GPIORead: 1:%d, 2:%d, from pin %d\n", arr[0], arr[1], PIN);
-        printf("GPIORead: 3:%d, from pin %d\n", toggle, PPIN);
+        printf("GPIORead: bitmask state: 0x%x (from pin %d)\n", arr_bitmask, PIN);
+        printf("GPIORead: toggle state: %d (from pin %d)\n", toggle, PPIN);
         usleep(1000 * 100);
-    } while (repeat--);
+    } while (repeat);
 
+    // GPIO 핀 해제
     if (GPIOUnexport(POUT2) == -1 || GPIOUnexport(PIN) == -1 || GPIOUnexport(PPOUT) == -1 || GPIOUnexport(PPIN) == -1)
     {
         return 4;
+
     }
 
+    // 스레드 종료 대기
     pthread_join(p_thread[0], (void **)&status);
     pthread_join(p_thread[1], (void **)&status);
 
