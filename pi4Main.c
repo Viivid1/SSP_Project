@@ -71,7 +71,7 @@ int main(void) {
 
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = inet_addr("192.168.0.5");
+    serv_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
     serv_addr.sin_port = htons(9999);
 
     // 서버에 연결
@@ -94,14 +94,16 @@ int main(void) {
     while (1) {
         int read_bytes = read(sock, recv_buf, sizeof(recv_buf)); // 서버로부터 데이터 받기
         char isSit = recv_buf[0];
+        
 
         if (read_bytes) {
             printf("Received from server: %s\n", recv_buf);
-            if(isSit=='1' && isStart==0){ // pi3 실행
+            if(isSit=='1' && isStart==0){ // pi4 실행
                 pthread_create(&acceleration_thread, NULL, acceleration_thread_func, NULL);
                 pthread_create(&camera_thread, NULL, camera_thread_func, NULL);
                 cameraMain(); //카메라 센서 실행
                 isStart = 1;
+                break;
             }
             else if(isSit=='0' && isStart==1){ //휴식
                 pthread_cancel(acceleration_thread);
@@ -113,6 +115,7 @@ int main(void) {
             }
             // 공부 종료, 데이터 전송
             else if(isSit=='2'){ 
+                printf("필기 종료");
                 pthread_cancel(acceleration_thread);
                 pthread_join(acceleration_thread, NULL);
                 // 필기시간 정수형을 문자열로 변환
@@ -124,6 +127,7 @@ int main(void) {
                 }
             }
             else if(isSit=='3'){
+                printf("촬영 종료");
                 pthread_cancel(camera_thread);
                 pthread_join(camera_thread, NULL);
                 // 사진파일 전송
