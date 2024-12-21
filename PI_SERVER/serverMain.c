@@ -28,6 +28,7 @@
 int isSit = 0;
 char cwd[PATH_MAX];
 int clnt_sock[2];
+char full_path[256];
 
 
 void error_handling(char *message) {
@@ -136,6 +137,7 @@ void *pi3_thread_func(void *arg){
   }
   return NULL;
 }
+
 void *pi3_thread_end_func(void *arg){
   char pi3[1] = {'2'};
   char buf[BUF_SIZE];
@@ -148,16 +150,13 @@ void *pi3_thread_end_func(void *arg){
   pthread_exit((void *)message);     
   return NULL;
 }
+
 void *pi4_thread_end_func(void *arg) {
   char pi4[1] = {'2'};
   char buf[BUF_SIZE];
   char *message = (char *)malloc(BUF_SIZE);  // 동적 메모리 할당
-  char full_path[256];
 
-  long file_size;
-  long total_received = 0;
-
-  //write_time 받아오기
+  //필기시간 정보보 받아오기
   write(clnt_sock[1], pi4, 1);
   usleep(100*100);
   int bytes_read = read(clnt_sock[1], buf, sizeof(buf)-1);
@@ -165,31 +164,20 @@ void *pi4_thread_end_func(void *arg) {
   strcpy(message, buf);  // 문자열 복사
   
 
-  //photos.zip 받아오기
-  pi4[0] = '3';
-  
+  sleep(1); //pi4에서 photos 소켓으로 송신할 때까지 대기
+
+  //사진 정보보 받아오기
   const char *folder_name = "study_photos";
   mkdir(folder_name, 0777);
   getcwd(cwd, sizeof(cwd));
   snprintf(full_path, sizeof(full_path), "%s/%s", cwd, folder_name);
   FILE *fp = fopen(full_path, "wb");
-  write(clnt_sock[1], pi4, 1);
-  usleep(100*100);
-  recv(clnt_sock[1], &file_size, sizeof(file_size), 0);
-  while (total_received < file_size) {
-        int bytes_received = recv(clnt_sock[1], buf, BUF_SIZE, 0);
-        if (bytes_received <= 0) {
-            perror("File receive error");
-            fclose(fp);
-            return NULL;
-        }
-        mkdir(folder_name, 0777);
-        fwrite(buf, 1, bytes_received, fp);
-        total_received += bytes_received;
-        printf("File received successfully: %s\n", full_path);
-        
+
+  while ((bytes_received = recv(client_sock, buffer, BUF_SIZE, 0)) > 0) {
+        fwrite(buffer, 1, bytes_received, fp); // 데이터를 파일에 기록
   }
   fclose(fp);
+
   pthread_exit((void *)message);
   return NULL;
 } 
@@ -259,9 +247,7 @@ int main(int argc, char *argv[]) {
   pthread_t pi4_thread_end;
   char pi4[1];
   char *pi3_data;
-  char *pi4_data;
-  char write_time[6] = {0};  // 0~5 인덱스 저장
-  char photo_zip[BUF_SIZE] = {0};  // 6부터 끝까지 저장
+  char *pi4_wt;
   time_t start_study, end_study, start_sit, end_sit;
   double study_time = 0;
   double sit_time = 0;
@@ -288,22 +274,20 @@ int main(int argc, char *argv[]) {
         free(pi3_data);
         //pi4로부터 필기 시간, 사진 압축 파일 가져오기
         pthread_create(&pi4_thread_end, NULL, pi4_thread_end_func, NULL);
-        pthread_join(pi4_thread_end, (void **)&pi4_data);
-        //필기 시간, 사진 압축 파일 분리
-        strncpy(write_time, pi4_data, 6);  // 0~5 인덱스 복사
-        write_time[6] = '\0';             // null-terminate for safety
-        double write_time_double = strtod(write_time, &endptr); //str -> double
-        strcpy(photo_zip, pi4_data + 6);  // 6부터 끝까지 복사      
-        free(pi4_data);  // 동적 메모리 해제
+        pthread_join(pi4_thread_end, (void **)&pi4_wt);
+             
+        write_time_double = strtod(pi4_wt, NULL);
+
+        free(pi4_wt);  // 동적 메모리 해제
         
-        printf("pi3_data: %s\n", pi3_data);
         time_diff_func(study_time, time_diff);
-        printf("공부 시간: %02d:%02d:%02d");
+        printf("공부 시간: %02d:%02d:%02d (hh:mm:ss)\n",time_diff[0], time_diff[1], time_diff[2]);
         time_diff_func(sit_time, time_diff);
-        printf("순공 시간(앉은 시간): %02d:%02d:%02d");
+        printf("순공 시간(앉은 시간): %02d:%02d:%02d (hh:mm:ss)\n",time_diff[0], time_diff[1], time_diff[2]);
         time_diff_func(write_time_double, time_diff);
-        printf("필기 시간: %02d:%02d:%02d (hh:mm:ss)\n",hours, minutes, secs);
-        printf("photo_zip 저장 경로: %s\n", photo_zip);
+        printf("필기 시간: %02d:%02d:%02d (hh:mm:ss)\n",time_diff[0], time_diff[1], time_diff[2]);
+        printf("%s\n", pi3_data);
+        printf("study_photos 저장 경로: %s\n", full_path);
 
         break;
       }
