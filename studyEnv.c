@@ -306,13 +306,13 @@ void *t_function1(void *data)
     // LED 상태를 arr_bitmask를 통해 제어
     while (repeat)
     {
-        if (GPIOWrite(POUT, (arr_bitmask & 0) ? 1 : 0) == -1)
+        if (GPIOWrite(POUT, (arr_bitmask & (1 << 0)) ? 1 : 0) == -1)
         {
             printf("write error\n");
             return NULL;
         }
         
-        if (GPIOWrite(POUT3, (arr_bitmask & 1) ? 1 : 0) == -1)
+        if (GPIOWrite(POUT3, (arr_bitmask & 1) ? (1 << 1)) == -1)
         {
             printf("write error\n");
             return NULL;
