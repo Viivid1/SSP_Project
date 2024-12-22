@@ -71,7 +71,7 @@ int main(void) {
 
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    serv_addr.sin_addr.s_addr = inet_addr("192.168.0.5");
     serv_addr.sin_port = htons(9999);
 
     // 서버에 연결
@@ -114,8 +114,8 @@ int main(void) {
                 break;
             }
             // 공부 종료, 데이터 전송
-            else if(isSit=='2'){ 
-                printf("필기 종료");
+            else if(isSit=='2'){
+                //필기 종료
                 pthread_cancel(acceleration_thread);
                 pthread_join(acceleration_thread, NULL);
                 // 필기시간 정수형을 문자열로 변환
@@ -125,9 +125,10 @@ int main(void) {
                     perror("write() error");
                     exit(1);
                 }
-            }
-            else if(isSit=='3'){
-                printf("촬영 종료");
+
+                sleep(1); //서버에서 필기시간간 수신하도록 대기기
+
+                //촬영 종료
                 pthread_cancel(camera_thread);
                 pthread_join(camera_thread, NULL);
                 // 사진파일 전송

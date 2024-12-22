@@ -21,7 +21,6 @@
 #define HIGH 1
 
 #define PIN 20
-#define POUT 21
 
 #define BUF_SIZE 1024 
 
@@ -123,13 +122,11 @@ static int GPIOWrite(int pin, int value) {
 
 // pi3 작동 스레드
 void *pi3_thread_func(void *arg){
-  char pi3[1] = {'1'};       
+  char pi3[1] = {'1'}; //'1'이라는 sign을 전송하기 위함       
   char threshold[1] = {0};
-  //pi3 작동(소켓 값이 1이면 작동)
   while(1){
     write(clnt_sock[0], pi3, 1);
-    //pi3로부터 압력 임계점 넘었는지 확인(넘었으면 pi3에서 소켓으로 
-    //1 전송해서 threshold에 저장)
+    //pi3로부터 압력 임계점 넘었는지 확인(넘었으면 pi3에서 소켓으로 1 전송해서 threshold에 저장)
     read(clnt_sock[0], threshold, 1);
 
     // 문자열 -> 정수형
@@ -138,25 +135,25 @@ void *pi3_thread_func(void *arg){
   return NULL;
 }
 
+//pi3 종료 스레드
 void *pi3_thread_end_func(void *arg){
-  char pi3[1] = {'2'};
+  char pi3[1] = {'2'}; //'2'라는 sign을 전송하기 위함  
   char buf[BUF_SIZE];
-  char *message = (char *)malloc(BUF_SIZE);  // 동적 메모리 할당
-
-  write(clnt_sock[0], pi3, 1); //pi4 중지 & pi3 data 요청
+  char *message = (char *)malloc(BUF_SIZE); 
+  write(clnt_sock[0], pi3, 1); //pi3 중지 & pi3 data 요청
   int bytes_read = read(clnt_sock[0], buf, sizeof(buf)-1);
-  buf[bytes_read] = '\0'; // null-terminate
-  strcpy(message, buf);  // 문자열 복사
+  buf[bytes_read] = '\0'; 
+  strcpy(message, buf); 
   pthread_exit((void *)message);     
   return NULL;
 }
-
+//pi4 종료 스레드
 void *pi4_thread_end_func(void *arg) {
   char pi4[1] = {'2'};
   char buf[BUF_SIZE];
   char *message = (char *)malloc(BUF_SIZE);  // 동적 메모리 할당
 
-  //필기시간 정보보 받아오기
+  //필기시간 정보 받아오기
   write(clnt_sock[1], pi4, 1);
   usleep(100*100);
   int bytes_read = read(clnt_sock[1], buf, sizeof(buf)-1);
@@ -166,7 +163,7 @@ void *pi4_thread_end_func(void *arg) {
 
   sleep(1); //pi4에서 photos 소켓으로 송신할 때까지 대기
 
-  //사진 정보보 받아오기
+  //사진 정보 받아오기
   const char *folder_name = "study_photos";
   mkdir(folder_name, 0777);
   getcwd(cwd, sizeof(cwd));
@@ -197,10 +194,10 @@ int main(int argc, char *argv[]) {
   socklen_t clnt_addr_size;
 
   // Enable GPIO pins
-  if (-1 == GPIOExport(PIN) || -1 == GPIOExport(POUT)) return (1);
+  if (-1 == GPIOExport(PIN)) return (1);
 
   // Set GPIO directions
-  if (-1 == GPIODirection(PIN, IN) || -1 == GPIODirection(POUT, OUT))
+  if (-1 == GPIODirection(PIN, IN))
     return (2);
 
   
@@ -212,7 +209,7 @@ int main(int argc, char *argv[]) {
   // 서버 주소 설정
   memset(&serv_addr, 0, sizeof(serv_addr));
   serv_addr.sin_family = AF_INET;
-  inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+  inet_pton(AF_INET, "192.168.0.5", &serv_addr.sin_addr);
   //serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
   serv_addr.sin_port = htons(9999); //직접 설정
 
@@ -254,7 +251,6 @@ int main(int argc, char *argv[]) {
   int time_diff[3];  
 
   while (1) {
-    if (-1 == GPIOWrite(POUT, 1)) return (3);
     state = GPIORead(PIN);
     if (prev_state == 0 && state == 1) { //버튼이 눌렸을 때
       if(pi3_unstart) {//공부 시작
@@ -286,7 +282,7 @@ int main(int argc, char *argv[]) {
         printf("순공 시간(앉은 시간): %02d:%02d:%02d (hh:mm:ss)\n",time_diff[0], time_diff[1], time_diff[2]);
         time_diff_func(write_time_double, time_diff);
         printf("필기 시간: %02d:%02d:%02d (hh:mm:ss)\n",time_diff[0], time_diff[1], time_diff[2]);
-        printf("%s\n", pi3_data);
+        printf("%s\n", pi3_data); //학생의 기울어짐 정도
         printf("study_photos 저장 경로: %s\n", full_path);
 
         break;
